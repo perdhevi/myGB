@@ -9,6 +9,7 @@ function App() {
     <>
         <Canvas>
             <Environment preset="sunset" background/>
+            <ambientLight />
             <GameboyModel />
         </Canvas>
 
