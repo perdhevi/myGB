@@ -5,12 +5,20 @@ import {Hero} from "../components/Hero";
 import {Canvas, ThreeEvent, useFrame, useThree} from "@react-three/fiber";
 import {Perf} from "r3f-perf";
 import {useRef} from "react";
-import {Vector2} from "three";
+import {Mesh, MeshBasicMaterial, Scene, SphereGeometry, Vector2} from "three";
+import Bullet from '../components/Bullet.tsx';
 
 export function Board({gameState}){
-    const speed = 0.1;
-
+    const maxScale = 10;
     const maxSize : Vector2 = new Vector2(2,1);
+
+    const speed = 0.1;
+    var bullets : Array<Bullet> = [];
+    var fireCoolDown =0;
+
+    var globalScene: Scene;
+    let pressed: Boolean = false;
+
     let degree: number = 0;
     const heroPos = new Vector2(0,0);
 
@@ -34,41 +42,106 @@ export function Board({gameState}){
     }
     function calcHeroMove(){
         const { forward, backward, left, right } = get();
-        heroPos.y  = heroPos.y  + (forward? speed : 0);
-        heroPos.y  = heroPos.y  - (backward? speed : 0);
+        heroPos.y  = heroPos.y  - (forward? speed : 0);
+        heroPos.y  = heroPos.y  + (backward? speed : 0);
         heroPos.x  = heroPos.x  - (left? speed : 0);
         heroPos.x  = heroPos.x  + (right? speed : 0);
 
+        if(heroPos.x >= maxSize.x * maxScale / 2) heroPos.x = maxSize.x * maxScale / 2;
+        if(heroPos.x <= -(maxSize.x * maxScale / 2)) heroPos.x = -(maxSize.x * maxScale / 2);
+        if(heroPos.y >= maxSize.y * maxScale / 2) heroPos.y = maxSize.y * maxScale / 2;
+        if(heroPos.y <= -(maxSize.y * maxScale / 2)) heroPos.y = -(maxSize.y * maxScale / 2);
+
         heroRef.current.position.x = heroPos.x;
         heroRef.current.position.y = 0.5
-        heroRef.current.position.z = -heroPos.y;
+        heroRef.current.position.z = heroPos.y;
 
 
     }
 
     function BSetup(){
-        const {camera} = useThree();
+        const {camera, scene} = useThree();
         camera.position.x = 0;
         camera.position.z =10;
         camera.position.y = 20;
 
         camera.lookAt(0,0,0);
+
+        globalScene = scene;
+
         useFrame(() => {
             //console.log("tick");
             calcHeroMove();
 
+            camera.position.x = heroPos.x;
+            camera.position.z = heroPos.y + 10;
+            camera.lookAt(heroPos.x,0,heroPos.y);
+
+            if(fireCoolDown >0) fireCoolDown --;
+
+            if(pressed)
+                fireBullet();
+
+            for(let i=0;i<bullets.length;i++){
+                bullets[i].sphereMesh.position.x  = bullets[i].sphereMesh.position.x + bullets[i].direction.x;
+                bullets[i].sphereMesh.position.z  = bullets[i].sphereMesh.position.z + bullets[i].direction.y;
+            }
+            cleanUpBullets();
         });
 
         return <></>
+    }
+    function cleanUpBullets(){
+        bullets = bullets.filter(function (bullet:Bullet)  {
+            if((Math.abs(bullet.sphereMesh.position.x) > maxSize.x * maxScale /2)||
+                (Math.abs(bullet.sphereMesh.position.z) > maxSize.y * maxScale / 2)){
+
+                globalScene.remove(bullet.sphereMesh);
+                bullet.sphereMesh.geometry.dispose();
+                return false;
+            }
+            return true;
+        })
+    }
+
+    function fireBullet(){
+        if(fireCoolDown <= 0){
+            fireCoolDown = 20;
+            let bul = new Bullet();
+            const geometry = new SphereGeometry( 0.1, 8, 8 );
+            const material = new MeshBasicMaterial( { color: 0xffff00 } );
+            const sphere = new Mesh( geometry, material );
+            bul.sphereMesh = sphere;
+
+            bul.sphereMesh.position.x = heroPos.x;
+            bul.sphereMesh.position.y = 1
+            bul.sphereMesh.position.z = heroPos.y;
+
+            const degree = heroRef.current.rotation.y
+
+            let x = (Math.cos(degree)) * 0.1;
+            let y = (Math.sin(-degree)) * 0.1;
+            bul.direction.x = x;
+            bul.direction.y = y;
+
+            globalScene.add( sphere );
+
+            bullets.push(bul)
+        }
+
     }
     function planeToPosition(input: Vector2): Vector2 {
         return new Vector2((input.x - 0.5) * maxSize.x * 10, (input.y - 0.5) * maxSize.y * 10);
     }
 
     function handleAreaPressed(event:ThreeEvent<PointerEvent>){
-        console.log('pressed', event);
-
+        pressed = true;
     }
+
+    function handleAreaReleae(event:ThreeEvent<PointerEvent>){
+        pressed = false;
+    }
+
     function handleAreaMove(event:ThreeEvent<PointerEvent>){
         const calc = planeToPosition(event.uv!);
         calculateHeroHeading(calc);
@@ -86,9 +159,10 @@ export function Board({gameState}){
             <mesh
                 onPointerMove={(event)=> handleAreaMove(event)}
                 onPointerDown = {(event)=> handleAreaPressed(event)}
+                onPointerUp = {(event)=> handleAreaReleae(event)}
                 position-y={ 0 }
                 rotation-x={ - Math.PI * 0.5 }
-                scale={ 10 }>
+                scale={ maxScale }>
                 <planeGeometry args={[maxSize.x, maxSize.y]}/>
                 <meshStandardMaterial color="brown" />
             </mesh>
@@ -96,6 +170,7 @@ export function Board({gameState}){
             <mesh  ref={heroRef} onClick={()=> gameState(1)} >
                 <Hero />
             </mesh>
+
         </Canvas>
     )
 }
