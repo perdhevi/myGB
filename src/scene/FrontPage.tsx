@@ -7,6 +7,9 @@ import {MonsterModel} from "../components/Monster.tsx";
 
 export function FrontPage({gameState}) {
 
+    function startTheGame(){
+        gameState(1);
+    }
     function FPSetup(){
         const {camera} = useThree();
         useFrame(() => {
@@ -24,7 +27,7 @@ export function FrontPage({gameState}) {
                 <FPSetup />
             <Stars radius={50} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
             <ambientLight />
-            <mesh onClick={()=> gameState(1)}>
+            <mesh onClick={()=> startTheGame()}>
                 <GameboyModel  />
             </mesh>
             {/*<mesh>*/}
