@@ -1,4 +1,4 @@
-import {Stars, useKeyboardControls} from "@react-three/drei";
+import {OrthographicCamera, Stars, useKeyboardControls} from "@react-three/drei";
 
 
 import {Hero} from "../components/Hero";
@@ -12,6 +12,7 @@ import Monster, {MonsterModel, MonsterState} from "../components/Monster.tsx";
 export function Board({gameState}){
     const maxScale = 10;
     const maxSize : Vector2 = new Vector2(2,1);
+    const maxPadding = 0.5;
 
     const speed = 0.1;
     let bullets : Array<Bullet> = [];
@@ -33,14 +34,24 @@ export function Board({gameState}){
         rotation: {x:0,y:0,z:0}
     });
 
+    function planeToPosition(input: Vector2): Vector2 {
+        return new Vector2(
+            (input.x) * (maxSize.x+maxPadding) * maxScale,
+            (input.y) * (maxSize.y+maxPadding) * maxScale
+        );
+    }
     function calculateHeroHeading(calc:Vector2){
+        let posX = heroRef.current.position.x + ((maxSize.x+maxPadding) * maxScale/2);
+        let posY = -(heroRef.current.position.z - ((maxSize.y+maxPadding) * maxScale/2));
+        const dx = (calc.x - posX);
+        const dy = (calc.y - posY);
+        // console.log('position.x :',posX, ' calc.x:', calc.x);
+        // console.log('position.y :',posY, ' calc.y:', calc.y);
 
-        const dx = heroRef.current.position.x - calc.x;
-        const dy = heroRef.current.position.z - calc.y;
         if(dx <0) {
-            degree = Math.atan((dy) / (dx));
+            degree = Math.PI - Math.atan((dy) / (-dx));
         }else{
-            degree = Math.PI + Math.atan((dy) / (dx));
+            degree = Math.atan((dy) / (dx));
         }
         heroRef.current.rotation.y = degree;
 
@@ -65,19 +76,19 @@ export function Board({gameState}){
 
     function spawnMonster(){
         if(spawnTimer !==0 ) return
-        console.log('spawning monster');
+        // console.log('spawning monster');
         spawnTimer= 100;
         let monster = new Monster();
 
         monster.Monster();
 
-        console.log(monster);
+        // console.log(monster);
 
         monster.monster.position.x = (Math.random() * maxSize.x * maxScale) - (maxSize.x * maxScale/2);
         monster.monster.position.z = (Math.random() * maxSize.y * maxScale) - (maxSize.y * maxScale/2);
         monster.monster.position.y = 1;
         // monster.monster.children[0].scale.setScalar(0.005);
-        console.log(monster.monster.position);
+        // console.log(monster.monster.position);
         globalScene.add(monster.monster);
 
         monsters.push(monster);
@@ -116,8 +127,8 @@ export function Board({gameState}){
 
     function cleanUpBullets(){
         bullets = bullets.filter(function (bullet:Bullet)  {
-            if((Math.abs(bullet.sphereMesh.position.x) > maxSize.x * maxScale /2)||
-                (Math.abs(bullet.sphereMesh.position.z) > maxSize.y * maxScale / 2)){
+            if((Math.abs(bullet.sphereMesh.position.x) > (maxSize.x+maxPadding) * maxScale /2)||
+                (Math.abs(bullet.sphereMesh.position.z) > (maxSize.y+maxPadding) * maxScale / 2)){
 
                 globalScene.remove(bullet.sphereMesh);
                 bullet.sphereMesh.geometry.dispose();
@@ -156,7 +167,7 @@ export function Board({gameState}){
             monsters.forEach((monster)=>{
                 let dx = (monster.monster.position.x < heroPos.x ? monsterSpeed : - monsterSpeed) ;
                 let dy = (monster.monster.position.z < heroPos.y ? monsterSpeed : - monsterSpeed) ;
-                console.log('dx,dy:', dx, dy);
+                // console.log('dx,dy:', dx, dy);
                 monster.monster.position.x =
                     monster.monster.position.x + dx;
                 monster.monster.position.z =
@@ -200,9 +211,7 @@ export function Board({gameState}){
         }
 
     }
-    function planeToPosition(input: Vector2): Vector2 {
-        return new Vector2((input.x - 0.5) * maxSize.x * 10, (input.y - 0.5) * maxSize.y * 10);
-    }
+
 
     function handleAreaPressed(event:ThreeEvent<PointerEvent>){
         pressed = true;
@@ -221,6 +230,7 @@ export function Board({gameState}){
     // @ts-ignore
     return (
         <Canvas camera={{fov:45}}>
+            <OrthographicCamera />
             <Perf />
             <BSetup />
             <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
@@ -230,11 +240,12 @@ export function Board({gameState}){
                 onPointerMove={(event)=> handleAreaMove(event)}
                 onPointerDown = {(event)=> handleAreaPressed(event)}
                 onPointerUp = {(event)=> handleAreaReleae(event)}
+                onPointerLeave={(event)=> handleAreaReleae(event)}
                 position-y={ -1 }
                 rotation-x={ - Math.PI * 0.5 }
                 scale={ maxScale }>
-                <planeGeometry args={[maxSize.x, maxSize.y]}/>
-                <meshStandardMaterial color="brown" />
+                <planeGeometry args={[maxSize.x+maxPadding, maxSize.y+maxPadding]}/>
+                <meshStandardMaterial color="#D2691E" />
             </mesh>
             {/*Hero*/}
             <mesh  ref={heroRef} onClick={()=> gameState(1)} >
