@@ -3,6 +3,7 @@ import {OrbitControls, Stars} from "@react-three/drei";
 import {GameboyModel} from "../components/GameboyModel.tsx";
 import {useFrame, useThree, Canvas} from "@react-three/fiber";
 import {Perf} from "r3f-perf";
+import {MonsterModel} from "../components/Monster.tsx";
 
 export function FrontPage({gameState}) {
 
@@ -26,6 +27,9 @@ export function FrontPage({gameState}) {
             <mesh onClick={()=> gameState(1)}>
                 <GameboyModel  />
             </mesh>
+            {/*<mesh>*/}
+            {/*    <MonsterModel />*/}
+            {/*</mesh>*/}
             </Canvas>
         </>
     );

@@ -7,20 +7,25 @@ import {Perf} from "r3f-perf";
 import {useRef} from "react";
 import {Mesh, MeshBasicMaterial, Scene, SphereGeometry, Vector2} from "three";
 import Bullet from '../components/Bullet.tsx';
+import Monster, {MonsterModel, MonsterState} from "../components/Monster.tsx";
 
 export function Board({gameState}){
     const maxScale = 10;
     const maxSize : Vector2 = new Vector2(2,1);
 
     const speed = 0.1;
-    var bullets : Array<Bullet> = [];
-    var fireCoolDown =0;
+    let bullets : Array<Bullet> = [];
 
-    var globalScene: Scene;
+    let monsters: Array<Monster> = [];
+    let spawnTimer = 0;
+    let monsterSpeed = 0.01;
+
+    let globalScene: Scene;
     let pressed: Boolean = false;
 
     let degree: number = 0;
     const heroPos = new Vector2(0,0);
+    let fireCoolDown = 0;
 
     const [, get] = useKeyboardControls()
     const heroRef = useRef({
@@ -30,8 +35,8 @@ export function Board({gameState}){
 
     function calculateHeroHeading(calc:Vector2){
 
-        const dx = heroPos.x - calc.x;
-        const dy = heroPos.y - calc.y;
+        const dx = heroRef.current.position.x - calc.x;
+        const dy = heroRef.current.position.z - calc.y;
         if(dx <0) {
             degree = Math.atan((dy) / (dx));
         }else{
@@ -56,41 +61,59 @@ export function Board({gameState}){
         heroRef.current.position.y = 0.5
         heroRef.current.position.z = heroPos.y;
 
+    }
+
+    function spawnMonster(){
+        if(spawnTimer !==0 ) return
+        console.log('spawning monster');
+        spawnTimer= 100;
+        let monster = new Monster();
+
+        monster.Monster();
+
+        console.log(monster);
+
+        monster.monster.position.x = (Math.random() * maxSize.x * maxScale) - (maxSize.x * maxScale/2);
+        monster.monster.position.z = (Math.random() * maxSize.y * maxScale) - (maxSize.y * maxScale/2);
+        monster.monster.position.y = 1;
+        // monster.monster.children[0].scale.setScalar(0.005);
+        console.log(monster.monster.position);
+        globalScene.add(monster.monster);
+
+        monsters.push(monster);
+
 
     }
 
-    function BSetup(){
-        const {camera, scene} = useThree();
-        camera.position.x = 0;
-        camera.position.z =10;
-        camera.position.y = 20;
+    function checkBullet(){
+        for(let i=0;i<bullets.length;i++){
+            bullets[i].sphereMesh.position.x  = bullets[i].sphereMesh.position.x + bullets[i].direction.x;
+            bullets[i].sphereMesh.position.z  = bullets[i].sphereMesh.position.z + bullets[i].direction.y;
 
-        camera.lookAt(0,0,0);
+            monsters.forEach((monster)=> {
+                if((bullets[i].sphereMesh.position.x >= monster.monster.position.x-0.5)&&
+                    (bullets[i].sphereMesh.position.x <= monster.monster.position.x+0.5)&&
+                    (bullets[i].sphereMesh.position.z <= monster.monster.position.z+0.5)&&
+                    (bullets[i].sphereMesh.position.z >= monster.monster.position.z-0.5)){
 
-        globalScene = scene;
+                    monster.state = MonsterState.dying;
+                    bullets[i].sphereMesh.position.x  =  maxSize.x * maxScale /2 + 10;
+                }
 
-        useFrame(() => {
-            //console.log("tick");
-            calcHeroMove();
+            });
+        }
 
-            camera.position.x = heroPos.x;
-            camera.position.z = heroPos.y + 10;
-            camera.lookAt(heroPos.x,0,heroPos.y);
-
-            if(fireCoolDown >0) fireCoolDown --;
-
-            if(pressed)
-                fireBullet();
-
-            for(let i=0;i<bullets.length;i++){
-                bullets[i].sphereMesh.position.x  = bullets[i].sphereMesh.position.x + bullets[i].direction.x;
-                bullets[i].sphereMesh.position.z  = bullets[i].sphereMesh.position.z + bullets[i].direction.y;
-            }
-            cleanUpBullets();
-        });
-
-        return <></>
     }
+
+    function cleanUpMonster(){
+        monsters = monsters.filter((monster) => {
+            if(monster.state == MonsterState.dying) {
+                globalScene.remove(monster.monster)
+                return false;
+            } return true;
+        })
+    }
+
     function cleanUpBullets(){
         bullets = bullets.filter(function (bullet:Bullet)  {
             if((Math.abs(bullet.sphereMesh.position.x) > maxSize.x * maxScale /2)||
@@ -103,6 +126,53 @@ export function Board({gameState}){
             return true;
         })
     }
+
+    function BSetup(){
+        const {camera, scene} = useThree();
+        camera.position.x = 0;
+        camera.position.z =10;
+        camera.position.y = 20;
+
+        camera.lookAt(0,0,0);
+
+        globalScene = scene;
+
+        useFrame((delta) => {
+            //console.log("tick", delta);
+            calcHeroMove();
+            spawnMonster();
+            camera.position.x = heroPos.x;
+            camera.position.z = heroPos.y +10;
+            camera.lookAt(heroPos.x,0,heroPos.y);
+
+            if(fireCoolDown >0) fireCoolDown --;
+            if(spawnTimer > 0 ) spawnTimer -= 1;
+
+            // spawnMonster();
+            if(pressed)
+                fireBullet();
+
+
+            monsters.forEach((monster)=>{
+                let dx = (monster.monster.position.x < heroPos.x ? monsterSpeed : - monsterSpeed) ;
+                let dy = (monster.monster.position.z < heroPos.y ? monsterSpeed : - monsterSpeed) ;
+                console.log('dx,dy:', dx, dy);
+                monster.monster.position.x =
+                    monster.monster.position.x + dx;
+                monster.monster.position.z =
+                    monster.monster.position.z + dy;
+                //monster.monster.rotation.y += delta;
+            })
+
+            checkBullet();
+            cleanUpBullets();
+            cleanUpMonster();
+
+        });
+
+        return <></>
+    }
+
 
     function fireBullet(){
         if(fireCoolDown <= 0){
@@ -152,15 +222,15 @@ export function Board({gameState}){
     return (
         <Canvas camera={{fov:45}}>
             <Perf />
-                <BSetup />
+            <BSetup />
             <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
             <ambientLight />
-            {/*Plane*/}
+            {/*/!*Plane*!/*/}
             <mesh
                 onPointerMove={(event)=> handleAreaMove(event)}
                 onPointerDown = {(event)=> handleAreaPressed(event)}
                 onPointerUp = {(event)=> handleAreaReleae(event)}
-                position-y={ 0 }
+                position-y={ -1 }
                 rotation-x={ - Math.PI * 0.5 }
                 scale={ maxScale }>
                 <planeGeometry args={[maxSize.x, maxSize.y]}/>
@@ -170,7 +240,9 @@ export function Board({gameState}){
             <mesh  ref={heroRef} onClick={()=> gameState(1)} >
                 <Hero />
             </mesh>
-
+            <mesh  position={[100,100,100]}>
+                <MonsterModel />
+            </mesh>
         </Canvas>
     )
 }
