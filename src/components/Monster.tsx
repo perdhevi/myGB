@@ -1,7 +1,5 @@
 import {useFBX} from '@react-three/drei';
 import {Group} from "three";
-import {FBXLoader} from "three/examples/jsm/loaders/FBXLoader";
-import {useLoader} from "@react-three/fiber";
 
 export enum MonsterState{
     chasing,
@@ -15,7 +13,7 @@ class Monster{
     monster:Group;
     state: MonsterState = MonsterState.chasing;
 
-    Monster(){
+    constructor(){
         if(!fbx) useFBX( '/assets/alien1.fbx');
         this.monster = fbx.clone();
     }

@@ -8,8 +8,9 @@ import {useRef} from "react";
 import {Mesh, MeshBasicMaterial, Scene, SphereGeometry, Vector2} from "three";
 import Bullet from '../components/Bullet.tsx';
 import Monster, {MonsterModel, MonsterState} from "../components/Monster.tsx";
+import {GameStateProps} from "../App.tsx";
 
-export function Board({gameState}){
+export function Board({gameState}:GameStateProps){
     const maxScale = 10;
     const maxSize : Vector2 = new Vector2(2,1);
     const maxPadding = 0.5;
@@ -28,11 +29,11 @@ export function Board({gameState}){
     const heroPos = new Vector2(0,0);
     let fireCoolDown = 0;
 
+    let heroHealth:number = 10;
+    let score:number = 0;
+
     const [, get] = useKeyboardControls()
-    const heroRef = useRef({
-        position: {x:0,y:0,z:0},
-        rotation: {x:0,y:0,z:0}
-    });
+    const heroRef = useRef<Mesh>(null!);
 
     function planeToPosition(input: Vector2): Vector2 {
         return new Vector2(
@@ -80,7 +81,7 @@ export function Board({gameState}){
         spawnTimer= 100;
         let monster = new Monster();
 
-        monster.Monster();
+
 
         // console.log(monster);
 
@@ -119,7 +120,8 @@ export function Board({gameState}){
     function cleanUpMonster(){
         monsters = monsters.filter((monster) => {
             if(monster.state == MonsterState.dying) {
-                globalScene.remove(monster.monster)
+                globalScene.remove(monster.monster);
+                score += 10;
                 return false;
             } return true;
         })
@@ -138,6 +140,31 @@ export function Board({gameState}){
         })
     }
 
+    function moveMonster(){
+
+        monsters.forEach((monster)=>
+        {
+        let dx = (monster.monster.position.x < heroPos.x ? monsterSpeed : - monsterSpeed) ;
+        let dy = (monster.monster.position.z < heroPos.y ? monsterSpeed : - monsterSpeed) ;
+
+        monster.monster.position.x = monster.monster.position.x + dx;
+        monster.monster.position.z = monster.monster.position.z + dy;
+
+        if((heroRef.current.position.x >= monster.monster.position.x-1)&&
+            (heroRef.current.position.x <= monster.monster.position.x+1)&&
+            (heroRef.current.position.z <= monster.monster.position.z+1)&&
+            (heroRef.current.position.z >= monster.monster.position.z-1)) {
+
+            monster.state = MonsterState.dying;
+            heroHealth --;
+
+        }
+
+    })
+
+
+    }
+
     function BSetup(){
         const {camera, scene} = useThree();
         camera.position.x = 0;
@@ -148,7 +175,7 @@ export function Board({gameState}){
 
         globalScene = scene;
 
-        useFrame((delta) => {
+        useFrame(() => {
             //console.log("tick", delta);
             calcHeroMove();
             spawnMonster();
@@ -163,17 +190,7 @@ export function Board({gameState}){
             if(pressed)
                 fireBullet();
 
-
-            monsters.forEach((monster)=>{
-                let dx = (monster.monster.position.x < heroPos.x ? monsterSpeed : - monsterSpeed) ;
-                let dy = (monster.monster.position.z < heroPos.y ? monsterSpeed : - monsterSpeed) ;
-                // console.log('dx,dy:', dx, dy);
-                monster.monster.position.x =
-                    monster.monster.position.x + dx;
-                monster.monster.position.z =
-                    monster.monster.position.z + dy;
-                //monster.monster.rotation.y += delta;
-            })
+            moveMonster();
 
             checkBullet();
             cleanUpBullets();
@@ -213,11 +230,11 @@ export function Board({gameState}){
     }
 
 
-    function handleAreaPressed(event:ThreeEvent<PointerEvent>){
+    function handleAreaPressed(){
         pressed = true;
     }
 
-    function handleAreaReleae(event:ThreeEvent<PointerEvent>){
+    function handleAreaReleae(){
         pressed = false;
     }
 
@@ -238,9 +255,9 @@ export function Board({gameState}){
             {/*/!*Plane*!/*/}
             <mesh
                 onPointerMove={(event)=> handleAreaMove(event)}
-                onPointerDown = {(event)=> handleAreaPressed(event)}
-                onPointerUp = {(event)=> handleAreaReleae(event)}
-                onPointerLeave={(event)=> handleAreaReleae(event)}
+                onPointerDown = {()=> handleAreaPressed()}
+                onPointerUp = {()=> handleAreaReleae()}
+                onPointerLeave={()=> handleAreaReleae()}
                 position-y={ -1 }
                 rotation-x={ - Math.PI * 0.5 }
                 scale={ maxScale }>

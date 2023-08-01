@@ -4,9 +4,13 @@ import {Board} from './scene/Board.tsx';
 import {FrontPage} from './scene/FrontPage.tsx'
 import {useState} from 'react';
 import {KeyboardControls} from "@react-three/drei";
+
+export type GameStateProps =  {
+    gameState(n:number): void;
+}
 function App() {
     let [gameState, setGameState] = useState(0);
-    function handleGameState(value:number){
+    function handleGameState(value:number) :void{
         setGameState(value)
     }
 
