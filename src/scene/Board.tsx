@@ -33,12 +33,14 @@ export function Board({gameState}:GameStateProps){
     const maxSize : Vector2 = new Vector2(2,1);
     const maxPadding = 0.5;
 
-    const speed = 0.1;
+    let speed:number = 5;
     let bullets : Array<Bullet> = [];
+    let bulletSpeed:number = 10;
+    let defaultFireCoolDown:number = 20;
 
     let monsters: Array<Monster> = [];
     let spawnTimer = 0;
-    let monsterSpeed = 0.01;
+    let monsterSpeed = 3;
 
     let globalScene: Scene;
     let pressed: Boolean = false;
@@ -57,7 +59,7 @@ export function Board({gameState}:GameStateProps){
     const heroRef = useRef<Mesh>(null!);
     const gameOverRef = useRef<Mesh>(null!);
     const scoreText = useRef<Text>(null!);
-
+    const healthText = useRef<Text>(null!);
 
     function planeToPosition(input: Vector2): Vector2 {
         return new Vector2(
@@ -70,8 +72,7 @@ export function Board({gameState}:GameStateProps){
         let posY = -(heroRef.current.position.z - ((maxSize.y+maxPadding) * maxScale/2));
         const dx = (calc.x - posX);
         const dy = (calc.y - posY);
-        // console.log('position.x :',posX, ' calc.x:', calc.x);
-        // console.log('position.y :',posY, ' calc.y:', calc.y);
+
 
         if(dx <0) {
             degree = Math.PI - Math.atan((dy) / (-dx));
@@ -81,12 +82,12 @@ export function Board({gameState}:GameStateProps){
         heroRef.current.rotation.y = degree + (Math.PI/2);
 
     }
-    function calcHeroMove(){
+    function calcHeroMove(delta:number){
         const { forward, backward, left, right } = get();
-        heroPos.y  = heroPos.y  - (forward? speed : 0);
-        heroPos.y  = heroPos.y  + (backward? speed : 0);
-        heroPos.x  = heroPos.x  - (left? speed : 0);
-        heroPos.x  = heroPos.x  + (right? speed : 0);
+        heroPos.y  = heroPos.y  - ((forward? speed : 0)*delta);
+        heroPos.y  = heroPos.y  + ((backward? speed : 0)*delta);
+        heroPos.x  = heroPos.x  - ((left? speed : 0)*delta);
+        heroPos.x  = heroPos.x  + ((right? speed : 0)*delta);
 
         if(heroPos.x >= maxSize.x * maxScale / 2) heroPos.x = maxSize.x * maxScale / 2;
         if(heroPos.x <= -(maxSize.x * maxScale / 2)) heroPos.x = -(maxSize.x * maxScale / 2);
@@ -114,10 +115,10 @@ export function Board({gameState}:GameStateProps){
 
     }
 
-    function checkBullet(){
+    function checkBullet(delta:number){
         for(let i=0;i<bullets.length;i++){
-            bullets[i].sphereMesh.position.x  = bullets[i].sphereMesh.position.x + bullets[i].direction.x;
-            bullets[i].sphereMesh.position.z  = bullets[i].sphereMesh.position.z + bullets[i].direction.y;
+            bullets[i].sphereMesh.position.x  = bullets[i].sphereMesh.position.x + (bullets[i].direction.x*delta);
+            bullets[i].sphereMesh.position.z  = bullets[i].sphereMesh.position.z + (bullets[i].direction.y*delta);
 
             monsters.forEach((monster)=> {
                 if((bullets[i].sphereMesh.position.x >= monster.monster.position.x-0.5)&&
@@ -139,15 +140,17 @@ export function Board({gameState}:GameStateProps){
             if(monster.state == MonsterState.dying) {
                 globalScene.remove(monster.monster);
                 score++
-                if(score % 20 == 0) defaultSpawnTimer -=5;
-                console.log(scoreText.current)
-                scoreText.current.textContent = "Score " + score.toString();
+                if(score % 5 == 0) {
+                    defaultSpawnTimer -=5;
+                    monsterSpeed += 0.5
+                }
+                // @ts-ignore
+                scoreText.current.text = "Score " + score.toString();
 
                 return false;
             } return true;
         })
     }
-
     function cleanUpBullets(){
         bullets = bullets.filter(function (bullet:Bullet)  {
             if((Math.abs(bullet.sphereMesh.position.x) > (maxSize.x+maxPadding) * maxScale /2)||
@@ -161,15 +164,15 @@ export function Board({gameState}:GameStateProps){
         })
     }
 
-    function moveMonster(){
+    function moveMonster(delta:number){
 
         monsters.forEach((monster)=>
         {
         let dx = (monster.monster.position.x < heroPos.x ? monsterSpeed : - monsterSpeed) ;
         let dy = (monster.monster.position.z < heroPos.y ? monsterSpeed : - monsterSpeed) ;
 
-        monster.monster.position.x = monster.monster.position.x + dx;
-        monster.monster.position.z = monster.monster.position.z + dy;
+        monster.monster.position.x = monster.monster.position.x + (dx*delta);
+        monster.monster.position.z = monster.monster.position.z + (dy*delta);
 
         if((heroRef.current.position.x >= monster.monster.position.x-1)&&
             (heroRef.current.position.x <= monster.monster.position.x+1)&&
@@ -178,7 +181,12 @@ export function Board({gameState}:GameStateProps){
 
             monster.state = MonsterState.dying;
             heroHealth--;
-            console.log(heroHealth);
+
+            bulletSpeed += 0.1;
+            speed += 1;
+            defaultFireCoolDown -= 1;
+            // @ts-ignore
+            healthText.current.text = "Health : " + heroHealth;
             if (heroHealth <= 0) {
 
                 boardState = BoardState.gamingOver;
@@ -202,14 +210,13 @@ export function Board({gameState}:GameStateProps){
         globalScene = scene;
 
 
-        useFrame(() => {
-            //console.log("tick", delta);
+        useFrame((_state, delta) => {
+
             switch(boardState){
                 case BoardState.playing:
 
                     heroRef.current.visible = true;
                     gameOverRef.current.visible = false;
-                    calcHeroMove();
                     spawnMonster();
                     camera.position.x = heroPos.x;
                     camera.position.z = heroPos.y +10;
@@ -221,9 +228,10 @@ export function Board({gameState}:GameStateProps){
                     if(pressed)
                         fireBullet();
 
-                    moveMonster();
+                    calcHeroMove(delta);
+                    moveMonster(delta);
+                    checkBullet(delta);
 
-                    checkBullet();
                     cleanUpBullets();
                     cleanUpMonster();
                     break;
@@ -261,20 +269,20 @@ export function Board({gameState}:GameStateProps){
 
     function fireBullet(){
         if(fireCoolDown <= 0){
-            fireCoolDown = 20;
+            fireCoolDown = defaultFireCoolDown;
             let bul = new Bullet();
             const geometry = new SphereGeometry( 0.1, 8, 8 );
             const material = new MeshBasicMaterial( { color: 0xffff00 } );
             const sphere = new Mesh( geometry, material );
             bul.sphereMesh = sphere;
-            let x = (Math.cos(degree)) * 0.1;
-            let y = (Math.sin(-degree)) * 0.1;
+            let x = (Math.cos(degree)) * bulletSpeed;
+            let y = (Math.sin(-degree)) * bulletSpeed;
             bul.direction.x = x;
             bul.direction.y = y;
 
-            bul.sphereMesh.position.x = heroPos.x + (4*x);
+            bul.sphereMesh.position.x = heroPos.x ;
             bul.sphereMesh.position.y = 0.2;
-            bul.sphereMesh.position.z = heroPos.y + (4*y);
+            bul.sphereMesh.position.z = heroPos.y ;
 
             //const degree = heroRef.current.rotation.y
 
@@ -296,7 +304,7 @@ export function Board({gameState}:GameStateProps){
         }
     }
 
-    function handleAreaReleae(){
+    function handleAreaRelease(){
         pressed = false;
     }
 
@@ -306,6 +314,7 @@ export function Board({gameState}:GameStateProps){
 
     }
 
+
     function PlayMode(){
         return <>
             <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
@@ -314,8 +323,8 @@ export function Board({gameState}:GameStateProps){
             <mesh
                 onPointerMove={(event)=> handleAreaMove(event)}
                 onPointerDown = {()=> handleAreaPressed()}
-                onPointerUp = {()=> handleAreaReleae()}
-                onPointerLeave={()=> handleAreaReleae()}
+                onPointerUp = {()=> handleAreaRelease()}
+                onPointerLeave={()=> handleAreaRelease()}
                 position-y={ -1 }
                 rotation-x={ - Math.PI * 0.5 }
                 scale={ maxScale }
@@ -333,20 +342,32 @@ export function Board({gameState}:GameStateProps){
             <pointLight
             position={[0,10,10]}/>
             <Hud>
-            <mesh
-                position-x={ (maxSize.x * maxScale /2) }
-                position-z = {-(maxSize.y * maxScale /2)}
-                rotation-x = { - Math.PI * 0.5 }
-                castShadow={true}>
-                <Center>
-
-                    <Text ref={scoreText}
-                        font='./font/Roboto Black_Regular.json'
+                <mesh
+                    position-x={ ((maxSize.x-maxPadding) * maxScale *6/10) }
+                    position-z = {-(maxSize.y * maxScale * 2/4)}
+                    rotation-x = { - Math.PI * 0.5 }
+                    castShadow={true}>
+                    <Center>
+                        <Text ref={scoreText}
+                            font='./font/Roboto Black_Regular.json'
+                            >
+                            Score : 0
+                        </Text>
+                    </Center>
+                </mesh>
+                <mesh
+                    position-x={ -((maxSize.x-maxPadding) * maxScale /2) }
+                    position-z = {-(maxSize.y * maxScale /2)}
+                    rotation-x = { - Math.PI * 0.5 }
+                    castShadow={true}>
+                    <Center>
+                        <Text ref={healthText}
+                              font='./font/Roboto Black_Regular.json'
                         >
-                        Score : 0
-                    </Text>
-                </Center>
-            </mesh>
+                            Health : 10
+                        </Text>
+                    </Center>
+                </mesh>
             </Hud>
         </>
     }
@@ -356,34 +377,33 @@ export function Board({gameState}:GameStateProps){
         const [ matcapTexture ] = useMatcapTexture('7B5254_E9DCC7_B19986_C8AC91', 256)
         return <>
             <mesh ref = {gameOverRef}>
-            <mesh  position-y={ 1 }
-                rotation-x = { - Math.PI * 0.5 }
-                castShadow={true}>
-                <Center>
-                   <Text3D
-                       font='./font/Roboto Black_Regular.json'
-                       size = { 2 }>
-                       Game Over
-                   </Text3D>
+                <mesh  position-y={ 1 }
+                    rotation-x = { - Math.PI * 0.5 }
+                    castShadow={true}>
+                    <Center>
+                       <Text3D
+                           font='./font/Roboto Black_Regular.json'
+                           size = { 2 }>
+                           Game Over
+                       </Text3D>
 
-                </Center>
-                <meshMatcapMaterial matcap={ matcapTexture } />
-            </mesh>
-            <mesh
-                  position-y={ 1 }
-                  position-z = {3}
-                  rotation-x = { - Math.PI * 0.5 }
-                  castShadow={true}>
-                <Center>
-
-                    <Text3D
-                        font='./font/Roboto Black_Regular.json'
-                        size = { 1 }>
-                        Click the board to go back
-                    </Text3D>
-                </Center>
-                <meshMatcapMaterial matcap={ matcapTexture } />
-            </mesh>
+                    </Center>
+                    <meshMatcapMaterial matcap={ matcapTexture } />
+                </mesh>
+                <mesh
+                    position-y={ 1 }
+                    position-z = {3}
+                    rotation-x = { - Math.PI * 0.5 }
+                    castShadow={true}>
+                    <Center>
+                        <Text3D
+                            font='./font/Roboto Black_Regular.json'
+                            size = { 1 }>
+                            Click the board to go back
+                        </Text3D>
+                    </Center>
+                    <meshMatcapMaterial matcap={ matcapTexture } />
+                </mesh>
             </mesh>
         </>
     }
