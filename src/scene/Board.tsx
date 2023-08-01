@@ -1,15 +1,33 @@
-import {OrthographicCamera, Stars, useKeyboardControls} from "@react-three/drei";
-
+import {
+    Center,
+    Hud,
+    OrthographicCamera,
+    Stars,
+    Text3D,
+    Text,
+    useKeyboardControls,
+    useMatcapTexture
+} from "@react-three/drei";
 
 import {Hero} from "../components/Hero";
 import {Canvas, ThreeEvent, useFrame, useThree} from "@react-three/fiber";
 import {Perf} from "r3f-perf";
 import {useRef} from "react";
+
 import {Mesh, MeshBasicMaterial, Scene, SphereGeometry, Vector2} from "three";
 import Bullet from '../components/Bullet.tsx';
 import Monster, {MonsterModel, MonsterState} from "../components/Monster.tsx";
 import {GameStateProps} from "../App.tsx";
 
+
+
+enum BoardState  {
+    playing,
+    gamingOver,
+    gameOver,
+    back
+
+}
 export function Board({gameState}:GameStateProps){
     const maxScale = 10;
     const maxSize : Vector2 = new Vector2(2,1);
@@ -32,8 +50,14 @@ export function Board({gameState}:GameStateProps){
     let heroHealth:number = 10;
     let score:number = 0;
 
+    let boardState : BoardState = BoardState.playing;
+    let defaultSpawnTimer = 100;
+
     const [, get] = useKeyboardControls()
     const heroRef = useRef<Mesh>(null!);
+    const gameOverRef = useRef<Mesh>(null!);
+    const scoreText = useRef<Text>(null!);
+
 
     function planeToPosition(input: Vector2): Vector2 {
         return new Vector2(
@@ -54,7 +78,7 @@ export function Board({gameState}:GameStateProps){
         }else{
             degree = Math.atan((dy) / (dx));
         }
-        heroRef.current.rotation.y = degree;
+        heroRef.current.rotation.y = degree + (Math.PI/2);
 
     }
     function calcHeroMove(){
@@ -77,23 +101,16 @@ export function Board({gameState}:GameStateProps){
 
     function spawnMonster(){
         if(spawnTimer !==0 ) return
-        // console.log('spawning monster');
-        spawnTimer= 100;
+        spawnTimer= defaultSpawnTimer;
         let monster = new Monster();
 
-
-
-        // console.log(monster);
-
-        monster.monster.position.x = (Math.random() * maxSize.x * maxScale) - (maxSize.x * maxScale/2);
-        monster.monster.position.z = (Math.random() * maxSize.y * maxScale) - (maxSize.y * maxScale/2);
+        monster.monster.position.x = heroRef.current.position.x + ((Math.random() * 0.5 + 0.5) * maxSize.x * maxScale) - (maxSize.x * maxScale/2);
+        monster.monster.position.z = heroRef.current.position.y + ((Math.random() * 0.5 + 0.5) * maxSize.y * maxScale) - (maxSize.y * maxScale/2);
         monster.monster.position.y = 1;
-        // monster.monster.children[0].scale.setScalar(0.005);
-        // console.log(monster.monster.position);
+
         globalScene.add(monster.monster);
 
         monsters.push(monster);
-
 
     }
 
@@ -121,7 +138,11 @@ export function Board({gameState}:GameStateProps){
         monsters = monsters.filter((monster) => {
             if(monster.state == MonsterState.dying) {
                 globalScene.remove(monster.monster);
-                score += 10;
+                score++
+                if(score % 20 == 0) defaultSpawnTimer -=5;
+                console.log(scoreText.current)
+                scoreText.current.textContent = "Score " + score.toString();
+
                 return false;
             } return true;
         })
@@ -156,8 +177,13 @@ export function Board({gameState}:GameStateProps){
             (heroRef.current.position.z >= monster.monster.position.z-1)) {
 
             monster.state = MonsterState.dying;
-            heroHealth --;
+            heroHealth--;
+            console.log(heroHealth);
+            if (heroHealth <= 0) {
 
+                boardState = BoardState.gamingOver;
+                console.log('gaming over...');
+            }
         }
 
     })
@@ -175,26 +201,57 @@ export function Board({gameState}:GameStateProps){
 
         globalScene = scene;
 
+
         useFrame(() => {
             //console.log("tick", delta);
-            calcHeroMove();
-            spawnMonster();
-            camera.position.x = heroPos.x;
-            camera.position.z = heroPos.y +10;
-            camera.lookAt(heroPos.x,0,heroPos.y);
+            switch(boardState){
+                case BoardState.playing:
 
-            if(fireCoolDown >0) fireCoolDown --;
-            if(spawnTimer > 0 ) spawnTimer -= 1;
+                    heroRef.current.visible = true;
+                    gameOverRef.current.visible = false;
+                    calcHeroMove();
+                    spawnMonster();
+                    camera.position.x = heroPos.x;
+                    camera.position.z = heroPos.y +10;
+                    camera.lookAt(heroPos.x,0,heroPos.y);
+                    if(fireCoolDown >0) fireCoolDown --;
+                    if(spawnTimer > 0 ) spawnTimer -= 1;
 
-            // spawnMonster();
-            if(pressed)
-                fireBullet();
+                    // spawnMonster();
+                    if(pressed)
+                        fireBullet();
 
-            moveMonster();
+                    moveMonster();
 
-            checkBullet();
-            cleanUpBullets();
-            cleanUpMonster();
+                    checkBullet();
+                    cleanUpBullets();
+                    cleanUpMonster();
+                    break;
+                case BoardState.gamingOver:
+                    monsters.forEach((monster) => {
+                        monster.state = MonsterState.dying;
+                    });
+                    bullets.forEach((bullet:Bullet)=> {
+                        bullet.sphereMesh.position.x =  ((maxSize.x+maxPadding) * maxScale /2) +10;
+                        bullet.sphereMesh.position.y =  ((maxSize.y+maxPadding) * maxScale /2) +10;
+                    });
+                    cleanUpMonster();
+                    cleanUpBullets();
+                    heroRef.current.visible = false;
+                    gameOverRef.current.visible = true;
+                    boardState = BoardState.gameOver;
+                    break;
+                case BoardState.gameOver:
+                    camera.position.x = 0;
+                    camera.position.z =10;
+                    camera.position.y = 20;
+
+                    camera.lookAt(0,0,0);
+
+                    break;
+                case BoardState.back:
+                    gameState(0);
+            }
 
         });
 
@@ -210,17 +267,18 @@ export function Board({gameState}:GameStateProps){
             const material = new MeshBasicMaterial( { color: 0xffff00 } );
             const sphere = new Mesh( geometry, material );
             bul.sphereMesh = sphere;
-
-            bul.sphereMesh.position.x = heroPos.x;
-            bul.sphereMesh.position.y = 1
-            bul.sphereMesh.position.z = heroPos.y;
-
-            const degree = heroRef.current.rotation.y
-
             let x = (Math.cos(degree)) * 0.1;
             let y = (Math.sin(-degree)) * 0.1;
             bul.direction.x = x;
             bul.direction.y = y;
+
+            bul.sphereMesh.position.x = heroPos.x + (4*x);
+            bul.sphereMesh.position.y = 0.2;
+            bul.sphereMesh.position.z = heroPos.y + (4*y);
+
+            //const degree = heroRef.current.rotation.y
+
+
 
             globalScene.add( sphere );
 
@@ -232,6 +290,10 @@ export function Board({gameState}:GameStateProps){
 
     function handleAreaPressed(){
         pressed = true;
+        if(boardState == BoardState.gameOver){
+            pressed = false;
+            boardState = BoardState.back;
+        }
     }
 
     function handleAreaReleae(){
@@ -244,15 +306,11 @@ export function Board({gameState}:GameStateProps){
 
     }
 
-    // @ts-ignore
-    return (
-        <Canvas camera={{fov:45}}>
-            <OrthographicCamera />
-            <Perf />
-            <BSetup />
+    function PlayMode(){
+        return <>
             <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-            <ambientLight />
-            {/*/!*Plane*!/*/}
+
+            {/*-------Plane-------*/}
             <mesh
                 onPointerMove={(event)=> handleAreaMove(event)}
                 onPointerDown = {()=> handleAreaPressed()}
@@ -260,17 +318,84 @@ export function Board({gameState}:GameStateProps){
                 onPointerLeave={()=> handleAreaReleae()}
                 position-y={ -1 }
                 rotation-x={ - Math.PI * 0.5 }
-                scale={ maxScale }>
+                scale={ maxScale }
+                receiveShadow={true}>
                 <planeGeometry args={[maxSize.x+maxPadding, maxSize.y+maxPadding]}/>
                 <meshStandardMaterial color="#D2691E" />
             </mesh>
-            {/*Hero*/}
+            {/*----------Hero-----------*/}
             <mesh  ref={heroRef} onClick={()=> gameState(1)} >
                 <Hero />
             </mesh>
             <mesh  position={[100,100,100]}>
                 <MonsterModel />
             </mesh>
+            <pointLight
+            position={[0,10,10]}/>
+            <Hud>
+            <mesh
+                position-x={ (maxSize.x * maxScale /2) }
+                position-z = {-(maxSize.y * maxScale /2)}
+                rotation-x = { - Math.PI * 0.5 }
+                castShadow={true}>
+                <Center>
+
+                    <Text ref={scoreText}
+                        font='./font/Roboto Black_Regular.json'
+                        >
+                        Score : 0
+                    </Text>
+                </Center>
+            </mesh>
+            </Hud>
+        </>
+    }
+
+    function GameOverMode(){
+        console.log('GameOver...')
+        const [ matcapTexture ] = useMatcapTexture('7B5254_E9DCC7_B19986_C8AC91', 256)
+        return <>
+            <mesh ref = {gameOverRef}>
+            <mesh  position-y={ 1 }
+                rotation-x = { - Math.PI * 0.5 }
+                castShadow={true}>
+                <Center>
+                   <Text3D
+                       font='./font/Roboto Black_Regular.json'
+                       size = { 2 }>
+                       Game Over
+                   </Text3D>
+
+                </Center>
+                <meshMatcapMaterial matcap={ matcapTexture } />
+            </mesh>
+            <mesh
+                  position-y={ 1 }
+                  position-z = {3}
+                  rotation-x = { - Math.PI * 0.5 }
+                  castShadow={true}>
+                <Center>
+
+                    <Text3D
+                        font='./font/Roboto Black_Regular.json'
+                        size = { 1 }>
+                        Click the board to go back
+                    </Text3D>
+                </Center>
+                <meshMatcapMaterial matcap={ matcapTexture } />
+            </mesh>
+            </mesh>
+        </>
+    }
+
+
+    return (
+        <Canvas camera={{fov:45}}>
+            <OrthographicCamera />
+            <Perf position="top-left"/>
+            <BSetup />
+            <PlayMode />
+            <GameOverMode />
         </Canvas>
     )
 }
