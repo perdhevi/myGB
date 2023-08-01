@@ -61,6 +61,16 @@ export function Board({gameState}:GameStateProps){
     const scoreText = useRef<Text>(null!);
     const healthText = useRef<Text>(null!);
 
+    function resetState(){
+        speed = 5;
+        bulletSpeed = 10;
+        defaultFireCoolDown = 20;
+        spawnTimer = 0;
+        monsterSpeed = 3;
+        heroHealth = 10;
+        score = 0;
+        defaultSpawnTimer = 100;
+    }
     function planeToPosition(input: Vector2): Vector2 {
         return new Vector2(
             (input.x) * (maxSize.x+maxPadding) * maxScale,
@@ -247,6 +257,7 @@ export function Board({gameState}:GameStateProps){
                     cleanUpBullets();
                     heroRef.current.visible = false;
                     gameOverRef.current.visible = true;
+                    resetState();
                     boardState = BoardState.gameOver;
                     break;
                 case BoardState.gameOver:
